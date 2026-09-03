@@ -1,0 +1,56 @@
+name: build-windows
+
+# Builds the Windows .exe of the UDP -> MJPEG server. PyInstaller cannot
+# cross-compile, so a real Windows runner is the only way to get a .exe from
+# a repo developed on macOS.
+#
+# Trigger: push a tag like `v1.0`, or run it by hand from the Actions tab
+# (workflow_dispatch). The finished .exe is attached to the run as an artifact.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build deps
+        run: pip install pyinstaller opencv-python-headless numpy zeroconf
+
+      - name: Build one-file exe
+        # --collect-all zeroconf/ifaddr: zeroconf is imported lazily inside a
+        # function and pulls submodules dynamically, so PyInstaller's static
+        # analysis misses them without this. The Windows build needs zeroconf
+        # because sys.platform != "darwin" there, so it falls back from the
+        # macOS `dns-sd` path to the zeroconf responder.
+        run: >
+          pyinstaller --onefile --name OV7670-Camera-Stream
+          --collect-all zeroconf --collect-all ifaddr
+          ov7670-stream/udp_mjpeg_server.py
+
+      - name: Smoke-test the exe
+        # Just prove it starts and registers without crashing, then kill it.
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist/OV7670-Camera-Stream.exe `
+            -ArgumentList '--no-browser','--no-mdns','--http-port','18080','--udp-port','15005' `
+            -PassThru
+          Start-Sleep -Seconds 5
+          if ($p.HasExited) { throw "exe exited early with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+          Write-Host "exe started and was still running after 5s -- OK"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OV7670-Camera-Stream-windows
+          path: dist/OV7670-Camera-Stream.exe
+          if-no-files-found: error
