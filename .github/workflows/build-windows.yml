@@ -35,7 +35,7 @@ jobs:
         run: >
           pyinstaller --onefile --name OV7670-Camera-Stream
           --collect-all zeroconf --collect-all ifaddr
-          ov7670-stream/udp_mjpeg_server.py
+          udp_mjpeg_server.py
 
       - name: Smoke-test the exe
         # Just prove it starts and registers without crashing, then kill it.
